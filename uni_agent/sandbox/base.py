@@ -149,10 +149,15 @@ async def _startup_slot() -> AsyncIterator[None]:
 class Sandbox(abc.ABC):
     """One provider = one class: owns lifecycle and is the data-plane backend.
 
-    Providers implement :meth:`start`, :meth:`stop` and the :meth:`_exec`
-    primitive; the public :meth:`exec` wraps ``_exec`` with a shared error
-    policy, and the non-login ``bash -c`` helper and exec-based file transfer build on
-    top. :meth:`expose_port` is optional (raises until a provider implements it).
+    Providers implement :meth:`start` and :meth:`stop`, plus either:
+
+    - :meth:`_exec` — the usual path; public :meth:`exec` wraps it with a shared
+      error policy, and :meth:`exec_shell` defaults to ``bash -c`` on top; or
+    - :meth:`exec` and :meth:`exec_shell` — override both when the backend has
+      its own command/shell semantics and should not use the base wrappers.
+
+    Exec-based file transfer builds on :meth:`exec` / :meth:`exec_shell`.
+    :meth:`expose_port` is optional (raises until a provider implements it).
     """
 
     #: Registry key for this provider, stamped by ``@register_sandbox``.
