@@ -12,6 +12,7 @@ import os
 import shlex
 import sys
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .base import ExecResult, Sandbox, _to_str
@@ -142,7 +143,7 @@ class OpenyuanrongSandbox(Sandbox):
     def from_config(cls, config: SandboxConfig) -> OpenyuanrongSandbox:
         return cls(image=config.image, runtime_timeout=config.runtime_timeout, **config.sandbox_kwargs)
 
-    # ----- control plane -----
+    # ----- public: control plane -----
     async def start(self) -> None:
         if self._sandbox is not None:
             return
@@ -184,18 +185,6 @@ class OpenyuanrongSandbox(Sandbox):
                 logger.warning("Failed to kill openyuanrong sandbox %s: %s", sid, e)
             self._sandbox = None
 
-    def _require(self) -> Any:
-        if self._sandbox is None:
-            raise RuntimeError("OpenyuanrongSandbox not started; call start() first")
-        return self._sandbox
-
-    @staticmethod
-    def _coerce_mount(m: Any, MountCls: type) -> Any:
-        """Accept a ``Mount`` instance or a dict (``target`` + ``image_url``/``s3_config``)."""
-        if isinstance(m, dict):
-            return MountCls(**m)
-        return m
-
     async def is_alive(self) -> bool:
         sb = self._sandbox
         if sb is None:
@@ -204,9 +193,6 @@ class OpenyuanrongSandbox(Sandbox):
             return bool(await asyncio.to_thread(sb.is_running))
         except Exception:
             return False
-
-    def _is_timeout_error(self, exc: BaseException) -> bool:
-        return type(exc).__name__ == "CommandTimeoutError" or super()._is_timeout_error(exc)
 
     async def open_shell(
         self,
@@ -219,7 +205,109 @@ class OpenyuanrongSandbox(Sandbox):
         shell = await sb.shells.create(cwd=cwd, envs=env)
         return _OpenyuanrongShell(shell)
 
-    # ----- data plane: one-shot shell (stdout/stderr merged via pty) -----
+    # ----- public: data plane (commands / files / ports) -----
+    async def exec(
+        self,
+        argv: list[str],
+        *,
+        timeout: float | None = None,
+        workdir: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> ExecResult:
+        """Fully overrides base ``exec``; does not use the base error-policy wrapper.
+
+        Joins ``argv`` and delegates to :meth:`exec_shell` (Yuanrong
+        ``commands.run``). Does not call ``super().exec`` or base ``_exec``.
+        """
+        return await self.exec_shell(shlex.join(argv), timeout=timeout, workdir=workdir, env=env)
+
+    async def exec_shell(
+        self,
+        script: str,
+        *,
+        timeout: float | None = None,
+        workdir: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> ExecResult:
+        """Fully overrides base ``exec_shell``; does not use ``bash -lc`` via base.
+
+        Runs ``script`` directly through Yuanrong ``commands.run``. Does not call
+        ``super().exec_shell`` / ``exec(["bash", "-lc", script])``. Owns its own
+        timeout / alive error policy (mirrors base ``exec``, not base ``exec_shell``).
+        """
+        try:
+            return await self._run_command(script, timeout=timeout, workdir=workdir, env=env)
+        except Exception as exc:
+            if self._is_timeout_error(exc):
+                return ExecResult(exit_code=-1, stdout="", stderr=f"exec timed out after {timeout}s: {exc}")
+            if not await self.is_alive():
+                raise
+            return ExecResult(exit_code=127, stdout="", stderr=str(exc))
+
+    async def read_file(self, path: str) -> bytes:
+        """Read via SDK ``files.read(..., format='bytes')``."""
+        data = await asyncio.to_thread(lambda: self._require().files.read(path, format="bytes"))
+        return data if isinstance(data, bytes) else bytes(data)
+
+    async def write_file(self, path: str, content: bytes | str) -> None:
+        """Write via SDK ``files.write``."""
+        data: bytes | str = content.encode("utf-8") if isinstance(content, str) else content
+        await asyncio.to_thread(self._require().files.write, path, data)
+
+    async def upload(self, local_path: Path | str, remote_path: str) -> None:
+        """Upload file or directory via SDK ``files.copy_from_local``."""
+        await asyncio.to_thread(self._require().files.copy_from_local, str(local_path), str(remote_path))
+
+    async def download(self, remote_path: str, local_path: Path | str) -> None:
+        """Download file or directory via SDK ``files.copy_to_local``."""
+        await asyncio.to_thread(self._require().files.copy_to_local, str(remote_path), str(local_path))
+
+    async def expose_port(self, port: int) -> str:
+        """Return gateway URL for a port declared in ``port_forwardings``."""
+        return await asyncio.to_thread(self._require().get_port_url, port)
+
+    def get_port_url(self, port: int) -> str:
+        return self._require().get_port_url(port)
+
+    def get_tunnel_url(self) -> str:
+        return self._require().get_tunnel_url()
+
+    # ----- private helpers -----
+    def _require(self) -> Any:
+        if self._sandbox is None:
+            raise RuntimeError("OpenyuanrongSandbox not started; call start() first")
+        return self._sandbox
+
+    @staticmethod
+    def _coerce_mount(m: Any, MountCls: type) -> Any:
+        """Accept a ``Mount`` instance or a dict (``target`` + ``image_url``/``s3_config``)."""
+        if isinstance(m, dict):
+            return MountCls(**m)
+        return m
+
+    def _is_timeout_error(self, exc: BaseException) -> bool:
+        return type(exc).__name__ == "CommandTimeoutError" or super()._is_timeout_error(exc)
+
+    async def _run_command(
+        self,
+        cmd: str,
+        *,
+        timeout: float | None = None,
+        workdir: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> ExecResult:
+        """Run a shell command string once via ``commands.run``."""
+        sb = self._require()
+        timeout_i = int(timeout) if timeout else 60
+        result = await asyncio.to_thread(
+            lambda: sb.commands.run(cmd, envs=env, cwd=workdir, timeout=timeout_i)
+        )
+        return ExecResult(
+            exit_code=int(getattr(result, "exit_code", -99)),
+            stdout=_to_str(getattr(result, "stdout", "")),
+            stderr=_to_str(getattr(result, "stderr", "")),
+        )
+
     async def _exec(
         self,
         argv: list[str],
@@ -228,28 +316,12 @@ class OpenyuanrongSandbox(Sandbox):
         workdir: str | None = None,
         env: dict[str, str] | None = None,
     ) -> ExecResult:
-        """Execute *cmd* inside the sandbox via a one-shot shell."""
-        sb = self._require()
-        cmd = shlex.join(argv)
-        shell = None
-        try:
-            shell = await sb.shells.create(cwd=workdir, envs=env)
-            result = await shell.run(cmd, timeout=int(timeout) if timeout else 60)
-            return ExecResult(
-                exit_code=getattr(result, "exit_code", -99),
-                stdout=_to_str(getattr(result, "stdout", "")),
-                stderr=_to_str(getattr(result, "stderr", "")),
-            )
-        finally:
-            if shell is not None:
-                try:
-                    await shell.kill()
-                except Exception:
-                    pass
+        """Intentionally unimplemented.
 
-    # ----- port forwarding / reverse tunnel helpers -----
-    def get_port_url(self, port: int) -> str:
-        return self._require().get_port_url(port)
-
-    def get_tunnel_url(self) -> str:
-        return self._require().get_tunnel_url()
+        Base marks ``_exec`` abstract, so this stub exists only to instantiate the
+        class. Public :meth:`exec` is fully overridden and never calls this (or
+        ``super().exec``).
+        """
+        raise NotImplementedError(
+            "OpenyuanrongSandbox overrides exec(); _exec is unused"
+        )
