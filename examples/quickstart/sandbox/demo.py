@@ -52,6 +52,7 @@ def build_tool_specs() -> list[dict]:
 
 async def toolbox_operations(sandbox: Sandbox, tool_specs: list[dict]) -> None:
     """Exercise Toolbox shell + str_replace_editor against the sandbox."""
+    banner("toolbox_operations: start — install dep -> create script -> run -> cat output")
     logger.info(f"tools selected : {[t['name'] for t in tool_specs]}")
     logger.info("(shell keeps a persistent shell channel; the editor is stateless)")
     logger.info("each tool owns its own state")
@@ -61,8 +62,6 @@ async def toolbox_operations(sandbox: Sandbox, tool_specs: list[dict]) -> None:
     async with toolbox.entered(retry=3, timeout=60):
         schemas = toolbox.schemas()
         logger.info(f"-> tool schemas : {[s['function']['name'] for s in schemas]}")
-
-        banner("Sandbox demo: install dep -> create script -> run -> cat output")
 
         # clean slate: local /tmp persists across runs (a fresh remote sandbox is already clean)
         await toolbox.call("shell", {"command": "rm -f /tmp/demo.py /tmp/demo_out.txt"})
@@ -112,10 +111,12 @@ async def toolbox_operations(sandbox: Sandbox, tool_specs: list[dict]) -> None:
         result = await toolbox.call("shell", {"command": "echo cwd=$(pwd); python3 demo.py"})
         logger.info(_indent(result))
 
+    banner("toolbox_operations: done")
+
 
 async def file_operations(sandbox: Sandbox) -> None:
     """Exercise sandbox write/read/upload/download."""
-    banner("Sandbox file APIs: write_file / read_file / upload / download")
+    banner("file_operations: start — write_file / read_file / upload / download")
 
     await sandbox.exec_shell("rm -f /tmp/sandbox_write.txt /tmp/sandbox_upload.txt")
 
@@ -141,6 +142,8 @@ async def file_operations(sandbox: Sandbox) -> None:
         await sandbox.download("/tmp/sandbox_upload.txt", local_dst)
         logger.info(_indent(local_dst.read_text(encoding="utf-8")))
         assert local_dst.read_text(encoding="utf-8") == "hello from upload\n"
+
+    banner("file_operations: done")
 
 
 async def main() -> None:
