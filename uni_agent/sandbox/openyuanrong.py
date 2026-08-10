@@ -299,9 +299,7 @@ class OpenyuanrongSandbox(Sandbox):
         """Run a shell command string once via ``commands.run``."""
         sb = self._require()
         timeout_i = int(timeout) if timeout else 60
-        result = await asyncio.to_thread(
-            lambda: sb.commands.run(cmd, envs=env, cwd=workdir, timeout=timeout_i)
-        )
+        result = await asyncio.to_thread(lambda: sb.commands.run(cmd, envs=env, cwd=workdir, timeout=timeout_i))
         return ExecResult(
             exit_code=int(getattr(result, "exit_code", -99)),
             stdout=_to_str(getattr(result, "stdout", "")),
@@ -322,6 +320,4 @@ class OpenyuanrongSandbox(Sandbox):
         class. Public :meth:`exec` is fully overridden and never calls this (or
         ``super().exec``).
         """
-        raise NotImplementedError(
-            "OpenyuanrongSandbox overrides exec(); _exec is unused"
-        )
+        raise NotImplementedError("OpenyuanrongSandbox overrides exec(); _exec is unused")
