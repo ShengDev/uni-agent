@@ -1,13 +1,22 @@
 # ruff: noqa: E501
 """Preprocess SWE-bench Verified into the new-framework SWE task format.
 
-Provider-agnostic on purpose: the row only carries the canonical *open-source*
-image ref (the published ``swebench/sweb.eval.x86_64.<id>``); mapping that to a
-service-provider image is the sandbox provider's job (e.g. ``_to_vefaas_image``),
-decided at run time, not baked into the dataset.
+By default each row carries the canonical open-source image
+(``swebench/sweb.eval.x86_64.<id>``). Set ``DATASET_RULES`` to bake a concrete
+registry address into the parquet (platform mapping stays in the env, not here).
+
+Format of ``DATASET_RULES`` (one rule)::
+
+    old_prefix=new_prefix
+    old_prefix=new_prefix|tag
 
 Example::
 
+    # Canonical images (provider may remap at run time)
+    python -m uni_agent.tasks.swe_bench.preprocess --local-save-dir ~/data/swe_agent
+
+    # Same mapping veFaaS uses at run time, expressed via env
+    export DATASET_RULES='swebench/=enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/|v2'
     python -m uni_agent.tasks.swe_bench.preprocess --local-save-dir ~/data/swe_agent
 """
 
@@ -18,11 +27,32 @@ from datasets import load_dataset
 
 
 def get_image_name(instance_id: str) -> str:
-    """Canonical open-source image ref (mirrors swebench's ``instance_image_key``).
+    """Image ref for this instance (canonical, or rewritten via ``DATASET_RULES``).
 
-    Provider-agnostic; a provider maps this to its own registry at run time.
+    Canonical form mirrors swebench's ``instance_image_key``. When
+    ``DATASET_RULES`` is set (``old_prefix=new_prefix`` or ``old_prefix=new_prefix|tag``),
+    rewrite before writing the dataset.
     """
-    return f"swebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
+    image = f"swebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
+    rules = os.getenv("DATASET_RULES", "").strip()
+    if not rules:
+        return image
+    if "=" not in rules:
+        raise ValueError(f"DATASET_RULES must look like 'old=new' or 'old=new|tag', got {rules!r}")
+
+    old, new = rules.split("=", 1)
+    old, new = old.strip(), new.strip()
+    tag = ""
+    if "|" in new:
+        new, tag = new.split("|", 1)
+        new, tag = new.strip(), tag.strip()
+    if not old or not image.startswith(old):
+        raise ValueError(f"DATASET_RULES old_prefix {old!r} does not match image {image!r}")
+
+    mapped = new + image[len(old) :]
+    if tag:
+        mapped = f"{mapped}:{tag.lstrip(':')}"
+    return mapped
 
 
 SYSTEM_PROMPT = """
@@ -144,6 +174,9 @@ def build_swe_bench_verified(max_instances: int | None = None):
 
     data_source = "princeton-nlp/SWE-bench_Verified"
     print(f"Loading the {data_source} dataset from huggingface...", flush=True)
+    rules = os.getenv("DATASET_RULES", "").strip()
+    if rules:
+        print(f"DATASET_RULES={rules!r}; baking rewritten images into the dataset", flush=True)
     dataset = load_dataset(data_source, split="test")
     print(f"Loaded {len(dataset)} raw instances", flush=True)
 
