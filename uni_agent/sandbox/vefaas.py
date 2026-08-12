@@ -23,17 +23,6 @@ logger = logging.getLogger(__name__)
 _RUNTIME_PORT = 8000
 
 
-def _to_vefaas_image(image: str) -> str:
-    if image == "python:3.12":
-        return "enterprise-public-2-cn-beijing.cr.volces.com/vefaas-public/python:3.12"
-    elif image.startswith("swebench/"):
-        return image.replace("swebench/", "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/") + ":v2"
-    elif image.startswith("swerebench/"):
-        return image.replace("swerebench/", "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/") + ":latest"
-    else:
-        raise ValueError(f"Unsupported image: {image}")
-
-
 def _split_env_list(raw: str | None) -> list[str]:
     """Parse a comma-separated env value into a list of trimmed, non-empty items."""
     if not raw:
@@ -280,9 +269,7 @@ class VefaasSandbox(Sandbox):
         # (VEFAAS_FUNCTION_ID / VEFAAS_FUNCTION_ROUTE / SANDBOX_PROXY). The two
         # function env vars may each hold a comma-separated list of paired values;
         # each sandbox binds to one randomly chosen pair.
-        return cls(
-            image=_to_vefaas_image(config.image), runtime_timeout=config.runtime_timeout, **config.sandbox_kwargs
-        )
+        return cls(image=config.image, runtime_timeout=config.runtime_timeout, **config.sandbox_kwargs)
 
     # ----- control plane -----
     async def start(self) -> None:
