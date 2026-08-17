@@ -43,6 +43,9 @@ The Quickstart includes two ready-to-use configs:
       sandbox:
         provider: modal
         runtime_timeout: 7200
+        image_map:
+          from: "swebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
         sandbox_kwargs:
           memory_gb: 8
       agent:
@@ -64,6 +67,9 @@ The Quickstart includes two ready-to-use configs:
     - name: swe_bench
       sandbox:
         provider: modal
+        image_map:
+          from: "swebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
       agent:
         name: react
         max_steps: 100

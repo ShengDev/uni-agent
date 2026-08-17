@@ -1,22 +1,12 @@
 # ruff: noqa: E501
 """Preprocess SWE-bench Multilingual into the new-framework SWE task format.
 
-By default each row carries the canonical open-source image
-(``swebench/sweb.eval.x86_64.<id>``). Set ``DATASET_RULES`` to bake a concrete
-registry address into the parquet (platform mapping stays in the env, not here).
-
-Format of ``DATASET_RULES`` (one rule)::
-
-    old_prefix=new_prefix
-    old_prefix=new_prefix|tag
+The generated rows are provider-agnostic: they carry the canonical public
+``swebench/sweb.eval.x86_64.<id>`` image reference and leave provider-specific
+image mapping and resource configuration to the sandbox at run time.
 
 Example::
 
-    python -m uni_agent.tasks.swe_bench_multilingual.preprocess \
-        --local-save-dir ~/data/swe_agent
-
-    # Same mapping veFaaS uses at run time, expressed via env
-    export DATASET_RULES='swebench/=enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/|v2'
     python -m uni_agent.tasks.swe_bench_multilingual.preprocess \
         --local-save-dir ~/data/swe_agent
 """
@@ -29,32 +19,8 @@ from swebench.harness.constants import MAP_REPO_TO_EXT
 
 
 def get_image_name(instance_id: str) -> str:
-    """Image ref for this instance (canonical, or rewritten via ``DATASET_RULES``).
-
-    Canonical form mirrors swebench's instance image key. When
-    ``DATASET_RULES`` is set (``old_prefix=new_prefix`` or ``old_prefix=new_prefix|tag``),
-    rewrite before writing the dataset.
-    """
-    image = f"swebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
-    rules = os.getenv("DATASET_RULES", "").strip()
-    if not rules:
-        return image
-    if "=" not in rules:
-        raise ValueError(f"DATASET_RULES must look like 'old=new' or 'old=new|tag', got {rules!r}")
-
-    old, new = rules.split("=", 1)
-    old, new = old.strip(), new.strip()
-    tag = ""
-    if "|" in new:
-        new, tag = new.split("|", 1)
-        new, tag = new.strip(), tag.strip()
-    if not old or not image.startswith(old):
-        raise ValueError(f"DATASET_RULES old_prefix {old!r} does not match image {image!r}")
-
-    mapped = new + image[len(old) :]
-    if tag:
-        mapped = f"{mapped}:{tag.lstrip(':')}"
-    return mapped
+    """Return the canonical image ref, mirroring swebench's instance image key."""
+    return f"swebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
 
 
 # Map swebench's file-extension code to a human-readable language for the prompt.
@@ -170,9 +136,6 @@ def build_swe_bench_multilingual(max_instances: int | None = None):
 
     data_source = "SWE-bench/SWE-bench_Multilingual"
     print(f"Loading the {data_source} dataset from huggingface...", flush=True)
-    rules = os.getenv("DATASET_RULES", "").strip()
-    if rules:
-        print(f"DATASET_RULES={rules!r}; baking rewritten images into the dataset", flush=True)
     dataset = load_dataset(data_source, split="test")
     print(f"Loaded {len(dataset)} raw instances", flush=True)
 

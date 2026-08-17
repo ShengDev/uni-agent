@@ -1,21 +1,8 @@
 # ruff: noqa: E501
 """Preprocess SWE-rebench into the new-framework SWE task format.
 
-By default each row carries the canonical open-source image
-(``swerebench/sweb.eval.x86_64.<id>``). Set ``DATASET_RULES`` to bake a concrete
-registry address into the parquet (platform mapping stays in the env, not here).
-
-Format of ``DATASET_RULES`` (one rule)::
-
-    old_prefix=new_prefix
-    old_prefix=new_prefix|tag
-
 Example::
 
-    python -m uni_agent.tasks.swe_rebench.preprocess --local-save-dir ~/data/swe_agent
-
-    # Same mapping veFaaS uses at run time, expressed via env
-    export DATASET_RULES='swerebench/=enterprise-public-cn-beijing.cr.volces.com/swe-rebench/|latest'
     python -m uni_agent.tasks.swe_rebench.preprocess --local-save-dir ~/data/swe_agent
 """
 
@@ -26,32 +13,12 @@ from datasets import load_dataset
 
 
 def get_image_name(instance_id: str) -> str:
-    """Image ref for this instance (canonical, or rewritten via ``DATASET_RULES``).
+    """Canonical open-source image ref for a swe-rebench instance.
 
-    Canonical form is published under the ``swerebench`` org. When
-    ``DATASET_RULES`` is set (``old_prefix=new_prefix`` or ``old_prefix=new_prefix|tag``),
-    rewrite before writing the dataset.
+    Published under the ``swerebench`` org (mirrors the modal image naming); a
+    provider maps this to its own registry at run time.
     """
-    image = f"swerebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
-    rules = os.getenv("DATASET_RULES", "").strip()
-    if not rules:
-        return image
-    if "=" not in rules:
-        raise ValueError(f"DATASET_RULES must look like 'old=new' or 'old=new|tag', got {rules!r}")
-
-    old, new = rules.split("=", 1)
-    old, new = old.strip(), new.strip()
-    tag = ""
-    if "|" in new:
-        new, tag = new.split("|", 1)
-        new, tag = new.strip(), tag.strip()
-    if not old or not image.startswith(old):
-        raise ValueError(f"DATASET_RULES old_prefix {old!r} does not match image {image!r}")
-
-    mapped = new + image[len(old) :]
-    if tag:
-        mapped = f"{mapped}:{tag.lstrip(':')}"
-    return mapped
+    return f"swerebench/sweb.eval.x86_64.{instance_id.lower().replace('__', '_1776_')}"
 
 
 SYSTEM_PROMPT = """
@@ -178,9 +145,6 @@ def build_swe_rebench(max_instances: int | None = None):
 
     data_source = "nebius/SWE-rebench"
     print(f"Loading the {data_source} dataset from huggingface...", flush=True)
-    rules = os.getenv("DATASET_RULES", "").strip()
-    if rules:
-        print(f"DATASET_RULES={rules!r}; baking rewritten images into the dataset", flush=True)
     dataset = load_dataset(data_source, split="filtered")
     print(f"Loaded {len(dataset)} raw instances", flush=True)
 

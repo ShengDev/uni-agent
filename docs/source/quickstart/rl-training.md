@@ -55,6 +55,9 @@ The Quickstart provides separate configs for the two Agent types:
       sandbox:
         provider: vefaas  # <-- Change to your Sandbox provider.
         runtime_timeout: 7200
+        image_map:
+          from: "swebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
       agent:
         name: react
         max_steps: 200
@@ -78,6 +81,9 @@ The Quickstart provides separate configs for the two Agent types:
       sandbox:
         provider: vefaas  # <-- Change to your Sandbox provider.
         runtime_timeout: 7200
+        image_map:
+          from: "swerebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
       agent:
         name: react
         max_steps: 200
@@ -105,6 +111,9 @@ The Quickstart provides separate configs for the two Agent types:
       sandbox:
         provider: vefaas  # <-- Change to your Sandbox provider.
         runtime_timeout: 7200
+        image_map:
+          from: "swebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
       agent:
         name: claude_code
         max_turns: 100
@@ -118,6 +127,9 @@ The Quickstart provides separate configs for the two Agent types:
       sandbox:
         provider: vefaas  # <-- Change to your Sandbox provider.
         runtime_timeout: 7200
+        image_map:
+          from: "swerebench/**:latest"
+          to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
       agent:
         name: claude_code
         max_turns: 100

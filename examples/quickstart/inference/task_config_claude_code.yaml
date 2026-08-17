@@ -2,6 +2,9 @@
   sandbox:
     provider: modal
     runtime_timeout: 7200
+    image_map:
+      from: "swebench/**:latest"
+      to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
   agent:
     name: claude_code
     max_turns: 200

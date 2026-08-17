@@ -5,6 +5,9 @@ apply the gold patch in the sandbox, run the tests, and score. Every instance
 should resolve -- it's the data-quality baseline you run before training. Results
 are bucketed as resolved (ok) / wrong-answer (wa) / timeout-or-error (tle) and
 streamed to a live progress bar.
+
+Pass ``--task-config`` (same YAML as ``parallel_infer_api.py``) so run-level
+``sandbox.image_map`` is merged before ``SandboxConfig`` is built.
 """
 
 import argparse
@@ -20,7 +23,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from uni_agent.logging import LogContext, sample_logging
-from uni_agent.tasks import get_task
+from uni_agent.tasks import TaskConfigResolver, get_task
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", force=True)
 logger = logging.getLogger(__name__)
@@ -38,17 +41,13 @@ class TestEvalActor:
     def __init__(self, log_dir: str | None):
         self.log_dir = log_dir
 
-    async def run_single(self, sample: dict) -> dict:
+    async def run_single(self, task_config: dict) -> dict:
         async with self._semaphore:
-            task_config = sample["extra_info"]["tools_kwargs"]["task"]
             instance_id = task_config["metadata"]["instance_id"]
             log_id = f"verify-{uuid4().hex}"
             log_path = str(Path(self.log_dir).expanduser() / log_id / "task.log") if self.log_dir else None
             async with sample_logging.from_context(LogContext(log_id, log_path)):
                 try:
-                    task_config["run_oracle_solution"] = True
-                    task_config["sandbox"]["provider"] = SANDBOX_PROVIDER
-                    task_config["sandbox"]["runtime_timeout"] = RUNTIME_TIMEOUT
                     result = await get_task(task_config).run()
                     info = result.extra_info or {}
                     resolved = bool(info.get("resolved", result.reward))
@@ -71,6 +70,18 @@ class TestEvalActor:
                     }
 
 
+def _prepare_task(sample: dict, resolver: TaskConfigResolver) -> dict:
+    """Merge run-level Task Config (including ``image_map``) onto the sample, then pin oracle eval."""
+    sample_config = sample["extra_info"]["tools_kwargs"]["task"]
+    resolved = resolver.resolve(sample_config)
+    sandbox = dict(resolved.get("sandbox") or {})
+    sandbox["provider"] = SANDBOX_PROVIDER
+    sandbox["runtime_timeout"] = RUNTIME_TIMEOUT
+    resolved["sandbox"] = sandbox
+    resolved["run_oracle_solution"] = True
+    return resolved
+
+
 def _rule(text: str = "", width: int = 50, ch: str = "-") -> str:
     """A centered-title horizontal rule."""
     if not text:
@@ -86,6 +97,12 @@ def main() -> None:
         default=os.getenv("DATA_PATH", os.path.expanduser("~/data/swe_agent/swe_bench_verified.parquet")),
     )
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS)
+    parser.add_argument(
+        "--task-config",
+        default=None,
+        help="Run-level Task Config YAML (same shape as parallel_infer_api). "
+        "Carries sandbox.image_map; omit to use the parquet sandbox fields as-is.",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Only verify the first N samples (smoke testing).")
     parser.add_argument(
         "--log-dir",
@@ -104,14 +121,27 @@ def main() -> None:
         logger.warning("no samples selected; exiting")
         return
 
-    logger.info(f"loaded {len(samples)} samples from {args.data_path}")
-    logger.info(f"provider={SANDBOX_PROVIDER} workers={args.num_workers} concurrency={GLOBAL_CONCURRENCY}")
+    resolver = TaskConfigResolver.from_file(args.task_config) if args.task_config else TaskConfigResolver()
+    try:
+        tasks = [_prepare_task(sample, resolver) for sample in samples]
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.error("failed to resolve Task Config: %s", exc)
+        return
 
-    num_workers = min(args.num_workers, len(samples))
+    logger.info(f"loaded {len(tasks)} samples from {args.data_path}")
+    logger.info(
+        "provider=%s workers=%s concurrency=%s config=%s",
+        SANDBOX_PROVIDER,
+        args.num_workers,
+        GLOBAL_CONCURRENCY,
+        args.task_config or "parquet",
+    )
+
+    num_workers = min(args.num_workers, len(tasks))
     workers = [TestEvalActor.remote(args.log_dir) for _ in range(num_workers)]
     # One future per sample (round-robin across workers) so we can stream
     # per-sample progress; the actor semaphore still bounds real concurrency.
-    futures = [workers[i % num_workers].run_single.remote(s) for i, s in enumerate(samples)]
+    futures = [workers[i % num_workers].run_single.remote(task) for i, task in enumerate(tasks)]
     fut_to_idx = {f: i for i, f in enumerate(futures)}
 
     begin_time = time.time()
