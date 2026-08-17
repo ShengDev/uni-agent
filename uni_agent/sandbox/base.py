@@ -159,19 +159,28 @@ class SandboxConfig(BaseModel):
 
     @model_validator(mode="after")
     def _apply_image_map(self) -> SandboxConfig:
-        maps = self.image_map
+        kwargs = dict(self.sandbox_kwargs)
+        raw = kwargs.pop("image_map", None)
+        if raw is not None:
+            self.sandbox_kwargs = kwargs
+            maps: ImageMap | list[ImageMap] | dict[str, Any] | list[Any] = raw
+        else:
+            maps = self.image_map
         if not maps:
             return self
         if not isinstance(maps, list):
             maps = [maps]
-        for image_map in maps:
+        resolved: list[ImageMap] = [
+            item if isinstance(item, ImageMap) else ImageMap.model_validate(item) for item in maps
+        ]
+        for image_map in resolved:
             mapped = image_map.try_map(self.image)
             if mapped is not None:
                 self.image = mapped
                 return self
         raise ValueError(
             "image_map from "
-            + ", ".join(repr(image_map.from_) for image_map in maps)
+            + ", ".join(repr(image_map.from_) for image_map in resolved)
             + f" does not match image {self.image!r}"
         )
 

@@ -15,7 +15,13 @@ config = SandboxConfig(
     provider="modal",
     image="python:3.12",
     runtime_timeout=3600,
-    sandbox_kwargs={"app_name": "agent-sandbox"},
+    sandbox_kwargs={
+        "app_name": "agent-sandbox",
+        "image_map": {
+            "from": "swebench/**:latest",
+            "to": "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2",
+        },
+    },
 )
 
 sandbox = build_sandbox(config)
@@ -25,24 +31,11 @@ The standard fields are:
 
 - `provider`: registered backend name.
 - `image`: container image used by image-backed providers such as Docker and Modal.
-- `image_map`: optional glob map applied to `image` when the config is constructed (`from` / `to`, with `**` capturing the middle of the name). A `from` tag of `latest` also matches an untagged image. Put this on the run-level Task Config so parquet rows keep canonical refs.
+- `image_map`: optional image-address conversion rules.
 - `runtime_timeout`: maximum remote sandbox lifetime.
 - `sandbox_kwargs`: provider-specific constructor arguments.
 
 Unknown fields are rejected. Put provider-specific options inside `sandbox_kwargs`.
-
-Registry mapping example (veFaaS private images):
-
-```yaml
-sandbox:
-  provider: vefaas
-  runtime_timeout: 7200
-  image_map:
-    from: "swebench/**:latest"
-    to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
-```
-
-A sample row still carries `sandbox.image: swebench/sweb.eval.x86_64....`. After Task Config merge, `SandboxConfig` maps it before the provider starts.
 
 ## Lifecycle
 
