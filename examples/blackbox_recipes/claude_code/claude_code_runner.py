@@ -214,15 +214,17 @@ async def _create_claude_sandbox(
     image_map: object = None,
 ) -> Sandbox:
     upstream = extract_upstream(gateway_url) if gateway_url else None
+    sandbox_kwargs = {
+        "mounts": [{"target": TOOL_TARGET, "image_url": sidecar_image}],
+        "upstream": upstream,
+        "proxy_port": proxy_port,
+    }
+    if image_map is not None:
+        sandbox_kwargs["image_map"] = image_map
     config = SandboxConfig(
         provider=os.getenv("SANDBOX_PROVIDER", "openyuanrong"),
         image=image,
-        image_map=image_map,
-        sandbox_kwargs={
-            "mounts": [{"target": TOOL_TARGET, "image_url": sidecar_image}],
-            "upstream": upstream,
-            "proxy_port": proxy_port,
-        },
+        sandbox_kwargs=sandbox_kwargs,
     )
     sandbox = build_sandbox(config)
     await sandbox.__aenter__(retry=10)

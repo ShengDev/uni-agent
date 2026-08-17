@@ -31,9 +31,9 @@ The standard fields are:
 
 - `provider`: registered backend name.
 - `image`: container image used by image-backed providers such as Docker and Modal.
-- `image_map`: optional image-address conversion rules.
 - `runtime_timeout`: maximum remote sandbox lifetime.
 - `sandbox_kwargs`: provider-specific constructor arguments.
+  - `image_map`: optional image-address conversion rules.
 
 Unknown fields are rejected. Put provider-specific options inside `sandbox_kwargs`.
 

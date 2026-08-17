@@ -7,7 +7,7 @@ are bucketed as resolved (ok) / wrong-answer (wa) / timeout-or-error (tle) and
 streamed to a live progress bar.
 
 Pass ``--task-config`` (same YAML as ``parallel_infer_api.py``) so run-level
-``sandbox.image_map`` is merged before ``SandboxConfig`` is built.
+``sandbox.sandbox_kwargs.image_map`` is merged before ``SandboxConfig`` is built.
 """
 
 import argparse
@@ -71,7 +71,7 @@ class TestEvalActor:
 
 
 def _prepare_task(sample: dict, resolver: TaskConfigResolver) -> dict:
-    """Merge run-level Task Config (including ``image_map``) onto the sample, then pin oracle eval."""
+    """Merge run-level Task Config (including ``sandbox_kwargs.image_map``) onto the sample, then pin oracle eval."""
     sample_config = sample["extra_info"]["tools_kwargs"]["task"]
     resolved = resolver.resolve(sample_config)
     sandbox = dict(resolved.get("sandbox") or {})
@@ -101,7 +101,7 @@ def main() -> None:
         "--task-config",
         default=None,
         help="Run-level Task Config YAML (same shape as parallel_infer_api). "
-        "Carries sandbox.image_map; omit to use the parquet sandbox fields as-is.",
+        "Carries sandbox.sandbox_kwargs.image_map; omit to use the parquet sandbox fields as-is.",
     )
     parser.add_argument("--limit", type=int, default=None, help="Only verify the first N samples (smoke testing).")
     parser.add_argument(

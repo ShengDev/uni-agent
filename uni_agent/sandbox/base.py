@@ -44,89 +44,45 @@ class ExecResult:
     stderr: str
 
 
-def _split_name_tag(ref: str) -> tuple[str, str | None]:
-    """Split ``name:tag``, ignoring a colon that belongs to ``host:port``."""
-    last_slash = ref.rfind("/")
-    last_colon = ref.rfind(":")
-    if last_colon > last_slash:
-        return ref[:last_colon], ref[last_colon + 1 :]
-    return ref, None
+def _name_tag(ref: str) -> tuple[str, str | None]:
+    slash, colon = ref.rfind("/"), ref.rfind(":")
+    return (ref[:colon], ref[colon + 1 :]) if colon > slash else (ref, None)
 
 
-def _match_glob(pattern: str, value: str) -> str | bool | None:
-    """Match ``value`` against a glob with at most one ``**``.
-
-    Returns the captured middle, ``True`` for an exact (no-``**``) match, or
-    ``None`` if it does not match.
-    """
-    if pattern.count("**") > 1:
-        raise ValueError(f"pattern may contain at most one '**': {pattern!r}")
+def _capture(pattern: str, value: str) -> str | None:
+    """Captured ``**`` (``""`` if the pattern has none). ``None`` if no match."""
     if "**" not in pattern:
-        return True if value == pattern else None
+        return "" if value == pattern else None
     left, right = pattern.split("**", 1)
     if not value.startswith(left) or (right and not value.endswith(right)):
         return None
-    mid_end = len(value) - len(right) if right else len(value)
-    if mid_end < len(left):
-        return None
-    mid = value[len(left) : mid_end]
-    return mid or None
+    return value[len(left) : len(value) - len(right) if right else None] or None
 
 
 class ImageMap(BaseModel):
-    """Map a canonical ``image`` with a glob ``from`` → ``to`` pattern.
+    """Glob ``from`` → ``to`` for ``image``. ``**`` captures; ``:latest`` also matches untagged."""
 
-    ``**`` captures the middle of the name. A ``from`` tag of ``latest`` also
-    matches an untagged image (Docker default). Applied when
-    :class:`SandboxConfig` is constructed, not at dataset preprocess time.
-
-    Example::
-
-        from: "swebench/**:latest"
-        to:   "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
-    """
-
-    from_: str = Field(alias="from", min_length=1, description="Glob matched against the canonical image.")
-    to: str = Field(min_length=1, description="Replacement glob; ``**`` is filled from ``from``.")
-
+    from_: str = Field(alias="from", min_length=1)
+    to: str = Field(min_length=1)
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     @model_validator(mode="after")
-    def _check_glob(self) -> ImageMap:
-        for label, pattern in (("from", self.from_), ("to", self.to)):
-            if pattern.count("**") > 1:
-                raise ValueError(f"image_map {label} may contain at most one '**'")
+    def _check(self) -> ImageMap:
+        if self.from_.count("**") > 1 or self.to.count("**") > 1:
+            raise ValueError("image_map may contain at most one '**'")
         if "**" in self.to and "**" not in self.from_:
             raise ValueError("image_map to has ** but from has none")
         return self
 
     def try_map(self, image: str) -> str | None:
-        from_name, from_tag = _split_name_tag(self.from_)
-        to_name, to_tag = _split_name_tag(self.to)
-        src_name, src_tag = _split_name_tag(image)
-
-        captured = _match_glob(from_name, src_name)
-        if captured is None:
+        src_name, src_tag = _name_tag(image)
+        from_name, from_tag = _name_tag(self.from_)
+        mid = _capture(from_name, src_name)
+        if mid is None or (from_tag and (src_tag or "latest") != from_tag):
             return None
-        if from_tag is not None:
-            effective_tag = src_tag if src_tag is not None else "latest"
-            if effective_tag != from_tag:
-                return None
-
-        if captured is True:
-            out_name = to_name
-        else:
-            out_name = to_name.replace("**", captured, 1)
-        out_tag = to_tag if to_tag is not None else src_tag
-        if out_tag:
-            return f"{out_name}:{out_tag}"
-        return out_name
-
-    def map_image(self, image: str) -> str:
-        mapped = self.try_map(image)
-        if mapped is None:
-            raise ValueError(f"image_map from {self.from_!r} does not match image {image!r}")
-        return mapped
+        to_name, to_tag = _name_tag(self.to)
+        name, tag = to_name.replace("**", mid, 1), to_tag or src_tag
+        return f"{name}:{tag}" if tag else name
 
 
 class SandboxConfig(BaseModel):
@@ -144,12 +100,6 @@ class SandboxConfig(BaseModel):
         description="Max sandbox runtime/lifetime (seconds) before it is killed; used by remote providers.",
     )
     image: str = Field(default="python:3.12", description="Container image for remote providers (e.g. modal).")
-    image_map: ImageMap | list[ImageMap] | None = Field(
-        default=None,
-        description="Optional glob map applied to ``image`` (``from`` / ``to``, ``**`` capture). "
-        "A list applies the first matching map. Put this on the run-level Task Config "
-        "so parquet rows keep canonical image refs.",
-    )
     sandbox_kwargs: dict[str, Any] = Field(
         default_factory=dict,
         description="Extra provider-specific kwargs forwarded to the sandbox constructor.",
@@ -159,30 +109,17 @@ class SandboxConfig(BaseModel):
 
     @model_validator(mode="after")
     def _apply_image_map(self) -> SandboxConfig:
-        kwargs = dict(self.sandbox_kwargs)
-        raw = kwargs.pop("image_map", None)
-        if raw is not None:
-            self.sandbox_kwargs = kwargs
-            maps: ImageMap | list[ImageMap] | dict[str, Any] | list[Any] = raw
-        else:
-            maps = self.image_map
-        if not maps:
+        raw = self.sandbox_kwargs.pop("image_map", None)
+        if not raw:
             return self
-        if not isinstance(maps, list):
-            maps = [maps]
-        resolved: list[ImageMap] = [
-            item if isinstance(item, ImageMap) else ImageMap.model_validate(item) for item in maps
-        ]
-        for image_map in resolved:
-            mapped = image_map.try_map(self.image)
-            if mapped is not None:
+        items = raw if isinstance(raw, list) else [raw]
+        maps = [m if isinstance(m, ImageMap) else ImageMap.model_validate(m) for m in items]
+        for rule in maps:
+            if (mapped := rule.try_map(self.image)) is not None:
                 self.image = mapped
                 return self
-        raise ValueError(
-            "image_map from "
-            + ", ".join(repr(image_map.from_) for image_map in resolved)
-            + f" does not match image {self.image!r}"
-        )
+        froms = ", ".join(repr(m.from_) for m in maps)
+        raise ValueError(f"image_map from {froms} does not match image {self.image!r}")
 
 
 @runtime_checkable
