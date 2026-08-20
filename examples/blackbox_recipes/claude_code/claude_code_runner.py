@@ -219,11 +219,10 @@ async def _create_claude_sandbox(
         "upstream": upstream,
         "proxy_port": proxy_port,
     }
-    if image_map is not None:
-        sandbox_kwargs["image_map"] = image_map
     config = SandboxConfig(
         provider=os.getenv("SANDBOX_PROVIDER", "openyuanrong"),
         image=image,
+        image_map=image_map or [],
         sandbox_kwargs=sandbox_kwargs,
     )
     sandbox = build_sandbox(config)

@@ -13,14 +13,20 @@ from uni_agent.sandbox import SandboxConfig, build_sandbox
 
 config = SandboxConfig(
     provider="modal",
-    image="python:3.12",
+    image="swebench/sweb.eval.x86_64.django_1776:latest",
     runtime_timeout=3600,
+    image_map=[
+        {
+            "from": "swebench/**:latest",
+            "to": "<your-registry>/swe-bench-verified/**:v2",
+        },
+        {
+            "from": "swerebench/**:latest",
+            "to": "<your-registry>/swe-rebench/**:latest",
+        },
+    ],
     sandbox_kwargs={
         "app_name": "agent-sandbox",
-        "image_map": {
-            "from": "swebench/**:latest",
-            "to": "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2",
-        },
     },
 )
 
@@ -31,11 +37,29 @@ The standard fields are:
 
 - `provider`: registered backend name.
 - `image`: container image used by image-backed providers such as Docker and Modal.
+- `image_map`: optional rewrite from the dataset image name to the image your cluster can pull (see below).
 - `runtime_timeout`: maximum remote sandbox lifetime.
 - `sandbox_kwargs`: provider-specific constructor arguments.
-  - `image_map`: optional image-address conversion rules.
 
 Unknown fields are rejected. Put provider-specific options inside `sandbox_kwargs`.
+
+### `image_map`
+
+SWE-Bench samples ship with public image names such as `swebench/sweb.eval.x86_64.django_1776:latest`. If your cluster cannot pull those names (private registry, mirror, or a local tag), add `image_map` under `sandbox` in Task Config. Do not edit the parquet.
+
+```yaml
+sandbox:
+  provider: modal
+  image_map:
+    - from: "swebench/**:latest"
+      to: "<your-registry>/swe-bench-verified/**:v2"
+    - from: "swerebench/**:latest"
+      to: "<your-registry>/swe-rebench/**:latest"
+```
+
+`**` copies the instance-specific path, so `swebench/sweb.eval.x86_64.django_1776:latest` becomes `<your-registry>/swe-bench-verified/sweb.eval.x86_64.django_1776:v2`.
+
+List as many rules as you need; the first matching `from` is used. Omit `image_map` when the sandbox can pull the dataset image as written.
 
 ## Lifecycle
 

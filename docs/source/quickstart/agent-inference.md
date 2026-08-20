@@ -43,11 +43,13 @@ The Quickstart includes two ready-to-use configs:
       sandbox:
         provider: modal
         runtime_timeout: 7200
+        image_map:
+          - from: "swebench/**:latest"
+            to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
+          - from: "swerebench/**:latest"
+            to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
         sandbox_kwargs:
           memory_gb: 8
-          image_map:
-            from: "swebench/**:latest"
-            to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
       agent:
         name: claude_code
         max_turns: 200
@@ -67,10 +69,11 @@ The Quickstart includes two ready-to-use configs:
     - name: swe_bench
       sandbox:
         provider: modal
-        sandbox_kwargs:
-          image_map:
-            from: "swebench/**:latest"
+        image_map:
+          - from: "swebench/**:latest"
             to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
+          - from: "swerebench/**:latest"
+            to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
       agent:
         name: react
         max_steps: 100
@@ -90,7 +93,9 @@ The Quickstart includes two ready-to-use configs:
           max_total_tokens: 65536
     ```
 
-Configure the sandbox provider and Agent limits in YAML. Do not hard-code the runtime endpoint there unless every run uses the same service: API mode injects it from `--base-url` and `--model`, while verl mode injects the session Gateway endpoint.
+Configure the sandbox provider and Agent limits in YAML. Keep both `swebench` and `swerebench` `image_map` rules so the same file covers Verified and reBench images. `**` copies the instance-specific path, and `:latest` on `from` also matches untagged parquet images. See [`image_map`](../concepts/sandbox.md#image_map).
+
+Do not hard-code the runtime endpoint there unless every run uses the same service: API mode injects it from `--base-url` and `--model`, while verl mode injects the session Gateway endpoint.
 
 !!! note "Claude Code network access"
     Claude Code runs inside the sandbox and calls the Anthropic Messages endpoint from there. The endpoint must therefore be resolvable and reachable **from inside the sandbox**.
