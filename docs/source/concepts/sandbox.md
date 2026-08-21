@@ -45,7 +45,7 @@ Unknown fields are rejected. Put provider-specific options inside `sandbox_kwarg
 
 ### `image_map`
 
-SWE-Bench samples ship with public image names such as `swebench/sweb.eval.x86_64.django_1776:latest`. If your cluster cannot pull those names (private registry, mirror, or a local tag), add `image_map` under `sandbox` in Task Config. Do not edit the parquet.
+SWE-Bench samples ship with public image names such as `swebench/sweb.eval.x86_64.astropy_1776_astropy-13033`. If your cluster cannot pull those names (private registry, mirror, or a local tag), add `image_map` under `sandbox` in Task Config. Do not edit the parquet.
 
 ```yaml
 sandbox:
@@ -57,7 +57,7 @@ sandbox:
       to: "<your-registry>/swe-rebench/**:latest"
 ```
 
-`**` copies the instance-specific path, so `swebench/sweb.eval.x86_64.django_1776:latest` becomes `<your-registry>/swe-bench-verified/sweb.eval.x86_64.django_1776:v2`.
+`**` copies the instance-specific path, so `swebench/sweb.eval.x86_64.astropy_1776_astropy-13033` becomes `<your-registry>/swebench/sweb.eval.x86_64.astropy_1776_astropy-13033:v2`.
 
 List as many rules as you need; the first matching `from` is used. Omit `image_map` when the sandbox can pull the dataset image as written.
 
