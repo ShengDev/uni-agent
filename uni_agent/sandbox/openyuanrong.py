@@ -261,7 +261,8 @@ class OpenyuanrongSandbox(Sandbox):
         """Run ``argv`` once via akernel ``Commands.run``."""
         sb = self._require()
         timeout_i = int(timeout) if timeout else 60
-        result = sb.commands.run(shlex.join(argv), envs=env, cwd=workdir, timeout=timeout_i)
+        # commands.run is a blocking SDK poll; run it off the event loop.
+        result = await asyncio.to_thread(sb.commands.run, shlex.join(argv), envs=env, cwd=workdir, timeout=timeout_i)
         exit_code = int(result.exit_code)
         stdout = _to_str(getattr(result, "stdout", ""))
         stderr = _to_str(getattr(result, "stderr", ""))
