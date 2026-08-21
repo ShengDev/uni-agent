@@ -24,15 +24,20 @@ _RUNTIME_PORT = 8000
 
 
 def _to_vefaas_image(image: str) -> str:
-    """Map a public Python image onto the veFaaS-hosted copy.
+    """Map a public image onto the veFaaS-hosted copy.
 
     Images already on ``volces.com`` (including those rewritten by ``image_map``)
-    are left unchanged. ``python:3.12`` is the only remaining public alias.
+    are left unchanged. Public aliases: ``python:3.12``, ``swebench/...``,
+    ``swerebench/...``.
     """
     if "volces.com" in image:
         return image
     if image == "python:3.12":
         return "enterprise-public-2-cn-beijing.cr.volces.com/vefaas-public/python:3.12"
+    if image.startswith("swebench/"):
+        return image.replace("swebench/", "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/") + ":v2"
+    if image.startswith("swerebench/"):
+        return image.replace("swerebench/", "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/") + ":latest"
     raise ValueError(f"Unsupported image: {image}")
 
 

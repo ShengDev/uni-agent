@@ -13,7 +13,7 @@ from uni_agent.sandbox import SandboxConfig, build_sandbox
 
 config = SandboxConfig(
     provider="modal",
-    image="swebench/sweb.eval.x86_64.django_1776:latest",
+    image="python:3.12",
     runtime_timeout=3600,
     image_map=[
         {
