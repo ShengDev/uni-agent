@@ -196,24 +196,6 @@ async with sandbox:
     ...
 ```
 
-### Map Dataset Images with `image_map`
-
-SWE-Bench samples use public image names such as `swebench/sweb.eval.x86_64.django_1776:latest`. If Docker Hub is blocked or you already host a mirror, keep the dataset unchanged and add `sandbox.image_map` in Task Config:
-
-```yaml
-sandbox:
-  provider: docker
-  image_map:
-    - from: "swebench/**:latest"
-      to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
-    - from: "swerebench/**:latest"
-      to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
-```
-
-`**` copies the instance-specific path, so the example above pulls `enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/sweb.eval.x86_64.django_1776:v2`. List several rules when you have more than one public prefix; the first matching `from` is used.
-
-Skip this field when your sandbox can pull the dataset image directly. See [`image_map`](../concepts/sandbox.md#image_map) for the same setting in `SandboxConfig`.
-
 ## Build a ReAct Toolbox
 
 A ReAct agent interacts with the sandbox through tools. The demo binds a stateful shell and a file editor:

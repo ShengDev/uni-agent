@@ -22,7 +22,7 @@ python -m uni_agent.tasks.swe_bench.preprocess --local-save-dir ~/data/swe_agent
 
 The command writes `~/data/swe_agent/swe_bench_verified.parquet`.
 
-Each row contains the prompt and a provider-agnostic task definition under `extra_info.tools_kwargs.task`, including that sample's `sandbox.image` (for example `swebench/sweb.eval.x86_64.django_1776`). Do not hard-code `image` in the YAML below. Optional `image_map` rewrites that per-sample name; see [`image_map`](../concepts/sandbox.md#image_map).
+Each row contains the prompt and a provider-agnostic task definition under `extra_info.tools_kwargs.task`. The selected sandbox backend maps the task image at runtime.
 
 ## Task Configuration
 
@@ -83,9 +83,7 @@ The Quickstart includes two ready-to-use configs:
           max_total_tokens: 65536
     ```
 
-Configure the sandbox provider and Agent limits in YAML. The instance image comes from the parquet row, not from a single `image:` field. Leave `image_map` empty unless you need to rewrite dataset image names; see [`image_map`](../concepts/sandbox.md#image_map).
-
-Do not hard-code the runtime endpoint there unless every run uses the same service: API mode injects it from `--base-url` and `--model`, while verl mode injects the session Gateway endpoint.
+Configure the sandbox provider and Agent limits in YAML. Do not hard-code the runtime endpoint there unless every run uses the same service: API mode injects it from `--base-url` and `--model`, while verl mode injects the session Gateway endpoint.
 
 !!! note "Claude Code network access"
     Claude Code runs inside the sandbox and calls the Anthropic Messages endpoint from there. The endpoint must therefore be resolvable and reachable **from inside the sandbox**.
