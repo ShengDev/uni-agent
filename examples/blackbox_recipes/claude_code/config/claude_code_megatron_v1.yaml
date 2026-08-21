@@ -64,11 +64,6 @@ actor_rollout_ref:
             max_concurrent_sessions: 32
             runner_kwargs:
               tool_image: swr.cn-east-3.myhuaweicloud.com/openyuanrong/claude-code-tool:latest
-              image_map:
-                - from: "swebench/**:latest"
-                  to: "enterprise-public-cn-beijing.cr.volces.com/swe-bench-verified/**:v2"
-                - from: "swerebench/**:latest"
-                  to: "enterprise-public-cn-beijing.cr.volces.com/swe-rebench/**:latest"
               run_timeout: 3600
               conda_env: testbed
               proxy_port: 38197
