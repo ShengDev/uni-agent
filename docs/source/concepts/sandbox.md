@@ -15,19 +15,7 @@ config = SandboxConfig(
     provider="modal",
     image="python:3.12",
     runtime_timeout=3600,
-    image_map=[
-        {
-            "from": "swebench/**:latest",
-            "to": "<your-registry>/swe-bench-verified/**:v2",
-        },
-        {
-            "from": "swerebench/**:latest",
-            "to": "<your-registry>/swe-rebench/**:latest",
-        },
-    ],
-    sandbox_kwargs={
-        "app_name": "agent-sandbox",
-    },
+    sandbox_kwargs={"app_name": "agent-sandbox"},
 )
 
 sandbox = build_sandbox(config)
@@ -49,7 +37,7 @@ SWE-Bench samples ship with public image names such as `swebench/sweb.eval.x86_6
 
 ```yaml
 sandbox:
-  provider: modal
+  provider: vefaas
   image_map:
     - from: "swebench/**:latest"
       to: "<your-registry>/swe-bench-verified/**:v2"
